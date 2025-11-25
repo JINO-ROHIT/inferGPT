@@ -1,0 +1,6 @@
+.venv/
+model/
+
+__pycache__/
+
+play.ipynb

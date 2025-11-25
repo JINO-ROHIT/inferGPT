@@ -1,0 +1,10 @@
+[project]
+name = "infergpt"
+version = "0.1.0"
+description = "a high performance c++ inference engine"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "huggingface-hub>=1.1.5",
+    "numpy>=2.3.5",
+]
