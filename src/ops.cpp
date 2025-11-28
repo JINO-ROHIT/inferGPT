@@ -1,5 +1,5 @@
-#include "include/tensor.h"
-#include "include/ops.h"
+#include "tensor.h"
+#include "ops.h"
 
 float sdot(const float* a, const float* b, int n) {
     float sum = 0.0f;
