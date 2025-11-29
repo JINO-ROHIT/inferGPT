@@ -1,6 +1,8 @@
 .venv/
 model/
-
+build/
+.vscode/
 __pycache__/
 
 play.ipynb
+.DS_Store
