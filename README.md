@@ -19,26 +19,32 @@ python3 scripts/convert_weight.py
 
 3. move the weights and index.json to `/model`.
 
-4. create the build directory
+4. You can either use the `setup.sh` or continue from step 5
+
+```
+bash setup.sh
+```
+
+5. create the build directory
 
 ```
 mkdir build
 cd build
 ```
 
-5. configure with Cmake
+6. configure with Cmake
 
 ```
 cmake ..
 ```
 
-6. build the project
+7. build the project
 
 ```
 make -j
 ```
 
-7. run the executable
+8. run the executable
 
 ```
 cd .. && ./build/inferGPT
