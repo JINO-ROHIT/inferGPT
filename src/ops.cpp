@@ -1,3 +1,5 @@
+#include <arm_neon.h>
+
 #include "tensor.h"
 #include "ops.h"
 
@@ -8,6 +10,28 @@ float sdot(const float* a, const float* b, int n) {
     }
     return sum;
 }
+
+ float sdot_simd(const float* a, const float* b, int n) {
+      const int simd_size = 4; // 128 bit / 32 bit = 4 floats
+      int simd_end = (n / simd_size) * simd_size;
+
+      float32x4_t sum_vec = vdupq_n_f32(0.0f);
+
+      for (int i = 0; i < simd_end; i += simd_size) {
+          float32x4_t va = vld1q_f32(a + i);
+          float32x4_t vb = vld1q_f32(b + i);
+          sum_vec = vmlaq_f32(sum_vec, va, vb); 
+      }
+
+      float sum = vaddvq_f32(sum_vec);
+
+      // remaining elements
+      for (int i = simd_end; i < n; ++i) {
+          sum += a[i] * b[i];
+      }
+
+      return sum;
+  }
 
 // single-precision vector addition: y = (a * x) + y
 void saxpy(int n, float a, const float* x, float* y) {

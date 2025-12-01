@@ -50,6 +50,16 @@ make -j
 cd .. && ./build/inferGPT
 ```
 
+### Current Benchmarks
+
+| Vectorization | Sampling Strategy | Performance | Speedup |
+|---|---|---|---|
+| no SIMD | Greedy | 15 toks/sec | 1.0x |
+| no SIMD | Temperature | 20 toks/sec | 1.0x |
+| **NEON SIMD** | Greedy | **52.8 toks/sec** | **3.5x** |
+| **NEON SIMD** | Temperature | **57.27 toks/sec** | **2.9x** |
+
+
 Roadmap
 - [ ] Operator fusion + multithreading
 - [ ] Implement SIMD instructions

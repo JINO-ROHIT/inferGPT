@@ -57,7 +57,7 @@ void MLPBlock::apply(const Tensor<1> &out, const Tensor<1> &in) {
         float y = c_fc_bias.data[j];
         const float* w_row = &c_fc_weight.data[j * emb_dim]; // remember matrix rows are stored contiguously (3072, 768)
 
-        y += sdot(in.data, w_row, emb_dim);
+        y += sdot_simd(in.data, w_row, emb_dim);
 
         // gelu approximation 
         float gelu = y / (1.0f + expf(-1.702f * y));
@@ -71,7 +71,7 @@ void MLPBlock::apply(const Tensor<1> &out, const Tensor<1> &in) {
         float sum = c_proj_bias.data[j];
         const float* w_row = &c_proj_weight.data[j * hidden_dim]; // (768, 3072)
 
-        sum += sdot(hbuf.data, w_row, hidden_dim);
+        sum += sdot_simd(hbuf.data, w_row, hidden_dim);
 
         out.data[j] += sum;
     }
@@ -85,7 +85,7 @@ void Model::apply_lm_head(Tensor<1> &emb_in, Tensor<1> &logits) {
   float *w = wte_weight.data; // (50257, 768)
   float m = -INFINITY;
   for (int j = 0; j < ntokens; j++) {
-    logits[j] = sdot(emb_in.data, w, embedding_dim);
+    logits[j] = sdot_simd(emb_in.data, w, embedding_dim);
     if (logits[j] > m) {
       m = logits[j];
     }
@@ -121,14 +121,14 @@ void CausalSelfAttention::apply(const Tensor<1> &out, const Tensor<1> &xbuf,
 
     // Compute Q = Qx + b_q
     for (int k = 0; k < emb_siz; k++) {
-      *q++ = (*b++) + sdot(x, w, emb_siz);
+      *q++ = (*b++) + sdot_simd(x, w, emb_siz);
       w += emb_siz;
     }
 
     // Compute K, V and cache them
     float *kv = &kvbuf(i, 0);
     for (int k = 0; k < 2 * emb_siz; k++) {
-      *kv++ = (*b++) + sdot(x, w, emb_siz);
+      *kv++ = (*b++) + sdot_simd(x, w, emb_siz);
       w += emb_siz;
     }
   }
@@ -148,7 +148,7 @@ void CausalSelfAttention::apply(const Tensor<1> &out, const Tensor<1> &xbuf,
 
       for (int j = 0; j <= i; j++) {
         float *k_head = kvbuf.data + j * kvbuf.shape[1] + head_offset;
-        float score = sdot(q_head, k_head, head_siz) * attn_scale;
+        float score = sdot_simd(q_head, k_head, head_siz) * attn_scale;
         scores[j] = score;
         if (score > max_score) {
           max_score = score;
@@ -182,7 +182,7 @@ void CausalSelfAttention::apply(const Tensor<1> &out, const Tensor<1> &xbuf,
     float *y = ybuf.data;
     float *o = out.data;
     for (int j = 0; j < emb_siz; j++) {
-      *o++ += c_proj_bias[j] + sdot(y, w, emb_siz);
+      *o++ += c_proj_bias[j] + sdot_simd(y, w, emb_siz);
       w += emb_siz;
     }
   }
