@@ -1,5 +1,6 @@
 #include <sys/mman.h>
 #include <assert.h>
+#include <arm_neon.h>
 
 #include "model.h"
 #include "ops.h"
@@ -10,29 +11,81 @@ Model::~Model(){
         munmap(mmap_data, mmap_siz);
     }
 }
+
 //reference formula - https://docs.pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html
+// void LayerNorm::apply(Tensor<1> &out, const Tensor<1> &in){
+//     float sum_ele = 0.0f;
+//     float sum_sq = 0.0f;
+//     float *data_ptr = in.data;
+//     int n = in.shape[0];
+
+//     for(int i = 0; i < n ; i++){
+//         float v = data_ptr[i];
+//         sum_ele += v;
+//         sum_sq += v * v;
+//     }
+
+//     float mean = sum_ele / in.shape[0];
+//     float variance = sum_sq / in.shape[0] - mean * mean; // var = E[x2]−(E[x])2
+//     const float eps = 1e-5;  // maybe add to a config?
+//     float invstddev = 1.0 / sqrt(variance + eps);
+//     float *w = weight.data;
+//     float *b = bias.data;
+//     float *o = out.data;
+//     for (int j = 0; j < n; j++) {
+//         o[j] = (data_ptr[j] - mean) * invstddev * w[j] + b[j];
+//     }
+// }
+
 void LayerNorm::apply(Tensor<1> &out, const Tensor<1> &in){
-    float sum_ele = 0.0f;
-    float sum_sq = 0.0f;
-    float *data_ptr = in.data;
-    int n = in.shape[0];
+  float *data_ptr = in.data;
+  float sum_ele = 0.0f;
+  float sum_sq = 0.0f;
 
-    for(int i = 0; i < n ; i++){
-        float v = data_ptr[i];
-        sum_ele += v;
-        sum_sq += v * v;
-    }
+  int n = in.shape[0];
+  const int simd_size = 4;
+  int simd_end = (n / simd_size) * simd_size;
 
-    float mean = sum_ele / in.shape[0];
-    float variance = sum_sq / in.shape[0] - mean * mean; // var = E[x2]−(E[x])2
-    const float eps = 1e-5;  // maybe add to a config?
-    float invstddev = 1.0 / sqrt(variance + eps);
-    float *w = weight.data;
-    float *b = bias.data;
-    float *o = out.data;
-    for (int j = 0; j < n; j++) {
-        o[j] = (data_ptr[j] - mean) * invstddev * w[j] + b[j];
-    }
+  for(int i = 0; i < simd_end; i += simd_size){
+    float32x4_t val = vld1q_f32(data_ptr + i);
+    //std::cout << val[0] << val[1] << val[2] << val[3];
+    sum_ele += vaddvq_f32(val);
+    // std::cout << sum_ele;
+    // break;
+    sum_sq += vaddvq_f32(vmulq_f32(val, val));
+  };
+
+  //remaining stuff
+  for(int i = simd_end; i < n; i++){
+    float v = data_ptr[i];
+    sum_ele += v;
+    sum_sq += v * v;
+  }
+
+  float mean = sum_ele / n;
+  float variance = sum_sq / n - mean * mean; // var = E[x2]−(E[x])2
+  const float eps = 1e-5;  // maybe add to a config?
+  float invstddev = 1.0 / sqrt(variance + eps);
+
+  float *w = weight.data;
+  float *b = bias.data;
+  float *o = out.data;
+
+  float32x4_t mean_vec = vdupq_n_f32(mean);
+  float32x4_t invstd_vec = vdupq_n_f32(invstddev);
+  
+  for (int j = 0; j < simd_end; j += simd_size) {
+      float32x4_t x = vld1q_f32(data_ptr + j);
+      float32x4_t weight_vec = vld1q_f32(w + j);
+      float32x4_t bias_vec = vld1q_f32(b + j);
+      
+      float32x4_t normalized = vsubq_f32(x, mean_vec);
+      normalized = vmulq_f32(normalized, invstd_vec);
+      normalized = vmulq_f32(normalized, weight_vec);
+      normalized = vaddq_f32(normalized, bias_vec);
+      
+      vst1q_f32(o + j, normalized);
+  }
 }
 
 void MLPBlock::apply(const Tensor<1> &out, const Tensor<1> &in) {

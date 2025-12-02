@@ -11,7 +11,7 @@ float sdot(const float* a, const float* b, int n) {
     return sum;
 }
 
- float sdot_simd(const float* a, const float* b, int n) {
+float sdot_simd(const float* a, const float* b, int n) {
       const int simd_size = 4; // 128 bit / 32 bit = 4 floats
       int simd_end = (n / simd_size) * simd_size;
 
@@ -31,7 +31,7 @@ float sdot(const float* a, const float* b, int n) {
       }
 
       return sum;
-  }
+}
 
 // single-precision vector addition: y = (a * x) + y
 void saxpy(int n, float a, const float* x, float* y) {
