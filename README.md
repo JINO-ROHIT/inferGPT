@@ -59,6 +59,7 @@ cd .. && ./build/inferGPT
 
 
 Roadmap
+- [ ] Add conditional compilation for metal archs
 - [ ] Operator fusion + multithreading
 - [ ] Implement SIMD instructions
 - [ ] Add quantization algorithms with performance benchmarking

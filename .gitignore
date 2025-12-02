@@ -1,6 +1,7 @@
 .venv/
 model/
 build/
+tests/
 .vscode/
 __pycache__/
 
