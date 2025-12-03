@@ -152,93 +152,88 @@ void Model::apply_lm_head(Tensor<1> &emb_in, Tensor<1> &logits) {
 }
 
 void CausalSelfAttention::apply(const Tensor<1> &out, const Tensor<1> &xbuf,
-                                int i, const Tensor<2> &kvbuf) {
-  const int emb_siz = 768;
-  const int num_heads = 12;
-  const int head_siz = 64;
+                                int pos, const Tensor<2> &kvbuf) {
+    const int emb_dim = 768;
+    const int num_heads = 12;
+    const int head_dim = emb_dim / num_heads;  // 64
+    
+    assert(head_dim * num_heads == emb_dim); 
+    assert(xbuf.shape[0] == emb_dim);
 
-  assert(xbuf.shape[0] == emb_siz);
-  assert(emb_siz / num_heads == head_siz);
-
-  float attn_scale = 1.0 / sqrt(head_siz);
-
-  // Buffer for query projection
-  Tensor<1> qbuf(emb_siz);
-  Tensor<1> ybuf(emb_siz);
-
-  {
-    float *w = c_attn_weight.data;
-    float *x = xbuf.data;
-    float *b = c_attn_bias.data;
-    float *q = qbuf.data;
-
-    // Compute Q = Qx + b_q
-    for (int k = 0; k < emb_siz; k++) {
-      *q++ = (*b++) + sdot_simd(x, w, emb_siz);
-      w += emb_siz;
+    Tensor<1> query_buf(emb_dim);      // q vector
+    Tensor<1> attn_out_buf(emb_dim);   // attn output
+    
+    float* weight_ptr = c_attn_weight.data;  // [2304, 768]
+    float* bias_ptr = c_attn_bias.data;      // [2304]
+    const float* input_ptr = xbuf.data;      // [768]
+    
+    // compute q
+    for (int d = 0; d < emb_dim; d++) {
+        query_buf[d] = bias_ptr[d] + sdot_simd(input_ptr, weight_ptr, emb_dim);
+        weight_ptr += emb_dim;  // move to next row in weight matrix , basically to k and v
     }
-
-    // Compute K, V and cache them
-    float *kv = &kvbuf(i, 0);
-    for (int k = 0; k < 2 * emb_siz; k++) {
-      *kv++ = (*b++) + sdot_simd(x, w, emb_siz);
-      w += emb_siz;
+    bias_ptr += emb_dim;  // move the bias pointer to k and v
+    
+    // kvbuf shape: [context_len, 2 * emb_dim] = [1024, 1536]
+    float* kv_cache_ptr = &kvbuf(pos, 0);
+    
+    // write K (first emb_dim elements) then V (next emb_dim elements)
+    for (int kv_idx = 0; kv_idx < 2 * emb_dim; kv_idx++) {
+        kv_cache_ptr[kv_idx] = bias_ptr[kv_idx] + sdot_simd(input_ptr, weight_ptr, emb_dim);
+        weight_ptr += emb_dim;
     }
-  }
-
-  {
-    memset(ybuf.data, 0, emb_siz * sizeof(float));
-
-    // Process each attention head
-    for (int h = 0; h < num_heads; h++) {
-      int head_offset = h * head_siz;
-      float *q_head = qbuf.data + head_offset;
-      float *y_head = ybuf.data + head_offset;
-
-      // Compute attention scores for this head across all previous tokens
-      float *scores = new float[i + 1];
-      float max_score = -INFINITY;
-
-      for (int j = 0; j <= i; j++) {
-        float *k_head = kvbuf.data + j * kvbuf.shape[1] + head_offset;
-        float score = sdot_simd(q_head, k_head, head_siz) * attn_scale;
-        scores[j] = score;
-        if (score > max_score) {
-          max_score = score;
+    // bias_ptr not needed after this point
+    
+    std::fill(attn_out_buf.data, attn_out_buf.data + emb_dim, 0.0f);
+    const float attn_scale = 1.0f / std::sqrt(static_cast<float>(head_dim));
+    
+    static std::vector<float> attention_scores;
+    attention_scores.resize(pos + 1);
+    
+    for (int head = 0; head < num_heads; head++) {
+        const int head_offset = head * head_dim;
+        float* query_head = query_buf.data + head_offset;
+        float* output_head = attn_out_buf.data + head_offset;
+        
+        float max_score = -INFINITY;
+        for (int prev_pos = 0; prev_pos <= pos; prev_pos++) {
+            const float* key_head = kvbuf.data + prev_pos * kvbuf.shape[1] + head_offset;
+            float score = sdot_simd(query_head, key_head, head_dim) * attn_scale;
+            
+            attention_scores[prev_pos] = score;
+            max_score = std::max(max_score, score);
         }
-      }
-
-      float sum_exp = 0.0f;
-      for (int j = 0; j <= i; j++) {
-        scores[j] = expf(scores[j] - max_score);
-        sum_exp += scores[j];
-      }
-      for (int j = 0; j <= i; j++) {
-        scores[j] /= sum_exp;
-      }
-
-      for (int j = 0; j <= i; j++) {
-        float *v_head = kvbuf.data + j * kvbuf.shape[1] + emb_siz + head_offset;
-        float weight = scores[j];
-        for (int k = 0; k < head_siz; k++) {
-          y_head[k] += weight * v_head[k];
+        
+        // softmax
+        float sum_exp = 0.0f;
+        for (int prev_pos = 0; prev_pos <= pos; prev_pos++) {
+            float exp_score = std::exp(attention_scores[prev_pos] - max_score);
+            attention_scores[prev_pos] = exp_score;
+            sum_exp += exp_score;
         }
-      }
-
-      delete[] scores;
+        
+        const float inv_sum_exp = 1.0f / sum_exp;
+        for (int prev_pos = 0; prev_pos <= pos; prev_pos++) {
+            attention_scores[prev_pos] *= inv_sum_exp;
+        }
+        
+        // weighted sum of value vectors
+        for (int prev_pos = 0; prev_pos <= pos; prev_pos++) {
+            const float attention_weight = attention_scores[prev_pos];
+            const float* value_head = kvbuf.data + prev_pos * kvbuf.shape[1] + emb_dim + head_offset;
+            
+            for (int d = 0; d < head_dim; d++) {
+                output_head[d] += attention_weight * value_head[d];
+            }
+        }
     }
-  }
-
-  // final projection: out += c_proj_weight @ ybuf + c_proj_bias
-  {
-    float *w = c_proj_weight.data;
-    float *y = ybuf.data;
-    float *o = out.data;
-    for (int j = 0; j < emb_siz; j++) {
-      *o++ += c_proj_bias[j] + sdot_simd(y, w, emb_siz);
-      w += emb_siz;
+    
+    // finalm proj layer
+    weight_ptr = c_proj_weight.data;  // [emb_dim, emb_dim] = [768, 768]
+    for (int d = 0; d < emb_dim; d++) {
+        out.data[d] += c_proj_bias[d] + sdot_simd(attn_out_buf.data, weight_ptr, emb_dim);
+        weight_ptr += emb_dim;
     }
-  }
 }
 
 void TransformerBlock::apply(const Tensor<1> &x, int i, const Tensor<2> &kvbuf) {
