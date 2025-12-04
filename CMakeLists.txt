@@ -17,6 +17,8 @@ set(SOURCES
     src/bpe.cpp
     src/load_gpt2.cpp
     src/ops.cpp
+    src/quantize.cpp
+    src/benchmark.cpp
 )
 
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "tensor.h"
+#include "quantize.h"
 
 struct LayerNorm{
     Tensor<1> bias;
@@ -15,7 +16,11 @@ struct MLPBlock {
   Tensor<1> c_proj_bias;
   Tensor<2> c_proj_weight;
 
-  void apply(const Tensor<1> &out, const Tensor<1> &in);
+  // Quantized weights
+  QuantizedTensor q_c_fc_weight;
+  QuantizedTensor q_c_proj_weight;
+
+  void apply(const Tensor<1> &out, const Tensor<1> &in, QuantizationType qtype);
 };
 
 struct CausalSelfAttention {
@@ -25,7 +30,11 @@ struct CausalSelfAttention {
   Tensor<1> c_proj_bias;
   Tensor<2> c_proj_weight;
 
-  void apply(const Tensor<1> &out, const Tensor<1> &xbuf, int i, const Tensor<2> &kvbuf);
+  // Quantized weights
+  QuantizedTensor q_c_attn_weight;
+  QuantizedTensor q_c_proj_weight;
+
+  void apply(const Tensor<1> &out, const Tensor<1> &xbuf, int i, const Tensor<2> &kvbuf, QuantizationType qtype);
 };
 
 
@@ -35,7 +44,7 @@ struct TransformerBlock {
   MLPBlock mlp;
 
   void normalize();
-  void apply(const Tensor<1> &x, int i, const Tensor<2> &kvbuf);
+  void apply(const Tensor<1> &x, int i, const Tensor<2> &kvbuf, QuantizationType qtype);
 };
 
 struct Model {
@@ -49,13 +58,20 @@ struct Model {
 
   Tensor<2> wte_weight;
   Tensor<2> wpe_weight;
+  
+  // Quantized weights
+  QuantizedTensor q_wte_weight;
+  
   LayerNorm ln_f;
 
   TransformerBlock *h;
+  
+  QuantizationType qtype;
 
   Model() {
     h = NULL;
     mmap_data = NULL;
+    qtype = QuantizationType::FP32;
   }
 
   ~Model();
