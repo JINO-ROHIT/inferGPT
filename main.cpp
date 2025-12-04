@@ -92,18 +92,10 @@ int main(){
     printf("Prompt: \"%s\"\n", prompt.c_str());
     printf("Generated: ");
 
-    auto greedy_start = std::chrono::steady_clock::now();
-    int greedy_tokens = generate_greedy(prompt.c_str(), ntokens, m, encoder, decoder, temperature);
-    auto greedy_end = std::chrono::steady_clock::now();
-    float tps = greedy_tokens / std::chrono::duration<float>(greedy_end - greedy_start).count();
-
-    printf("\n\nGenerated %d tokens total.\n", greedy_tokens);
-    printf("\n\nGreedy sampling speed: %.2f tokens/sec\n", tps);
-
     auto sampled_start = std::chrono::steady_clock::now();
     int sampled_tokens = generate_temperature_scaling(prompt.c_str(), ntokens, m, encoder, decoder, temperature);
     auto sampled_end = std::chrono::steady_clock::now();
-    float tps_sampled = greedy_tokens / std::chrono::duration<float>(sampled_end - sampled_start).count();
+    float tps_sampled = sampled_tokens / std::chrono::duration<float>(sampled_end - sampled_start).count();
     printf("\n\nGenerated %d tokens total.\n", sampled_tokens);
     printf("\n\ntemperature sampling speed: %.2f tokens/sec\n", tps_sampled);
 

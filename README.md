@@ -59,6 +59,7 @@ cd .. && ./build/inferGPT
 
 
 Roadmap
+( would flash attention make sense on a CPU? flash attention style blocked matrices?)
 - [ ] Add conditional compilation for metal archs
 - [x] Operator fusion
 - [x] Implement SIMD instructions
