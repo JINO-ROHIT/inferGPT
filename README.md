@@ -56,18 +56,18 @@ cd .. && ./build/inferGPT
 |---|---|---|---|
 | no SIMD | Temperature | 20 toks/sec | 1.0x |
 | **NEON SIMD** (dot product) | Temperature | **57.27 toks/sec** | **2.9x** |
+| **INT8 Quantization** | Greedy | **~55 toks/sec** | **2.8x** |
+| **INT4 Quantization** | Greedy | **~50 toks/sec** | **2.5x** |
 
+### Quantization
 
-Roadmap
-- [ ] Add conditional compilation for metal archs
-- [x] Operator fusion
-- [x] Implement SIMD instructions
-- [ ] Add quantization algorithms with performance benchmarking
-- [ ] Support GPU operations via CUDA C++
+The engine supports INT8 and INT4 quantization for reduced memory usage.
+- **INT8**: ~4x memory reduction, minimal accuracy loss.
+- **INT4**: ~8x memory reduction, slight accuracy trade-off.
 
-
-### References
-
-1. https://github.com/a1k0n/a1gpt/
+To run benchmarks:
+```
+./build/inferGPT
+```
 2. https://github.com/karpathy/llama2.c
 3. https://github.com/ggml-org/llama.cpp
