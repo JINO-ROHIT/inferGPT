@@ -64,6 +64,46 @@ int generate_temperature_scaling(const char *prompt, int ntokens, Model &m, BPEE
 
 }
 
+// applies to the prompt given
+float calculate_ppl(const char *prompt, int ntokens, Model &m, BPEEncoder &encoder, BPEDecoder &decoder, float temperature){
+      int ctx_tokens[ctx_max+1];
+      int N;
+      float nll = 0.0; 
+
+      encoder.encode(prompt, ctx_tokens, ctx_max, &N);
+
+      Tensor<3> kvbuf(12, ctx_max, 2*m.embedding_dim);
+      Tensor<1> ybuf(m.embedding_dim);
+      Tensor<1> logitbuf(m.ntokens);
+
+      for (int j = 0; j < N - 1; j++) { 
+          m.apply_transformer(ctx_tokens[j], j, kvbuf, ybuf);
+          m.apply_lm_head(ybuf, logitbuf);
+
+          for (int i = 0; i < m.ntokens; i++) {
+              logitbuf[i] /= temperature;
+          }
+
+          float max_logit = -INFINITY;
+          for (int i = 0; i < m.ntokens; i++) {
+              max_logit = std::max(max_logit, logitbuf[i]);
+          }
+
+          float sum_exp = 0.0;
+          for (int i = 0; i < m.ntokens; i++) {
+              sum_exp += std::exp(logitbuf[i] - max_logit);
+          }
+
+          int target_token = ctx_tokens[j + 1];
+          float target_logit = logitbuf[target_token];
+          float target_prob = std::exp(target_logit - max_logit) / sum_exp;
+
+          nll += -std::log(target_prob + 1e-10);
+      }
+
+      return std::exp(nll / (N - 1));
+  }
+
 int main(){
 
     Model m;
@@ -99,5 +139,7 @@ int main(){
     printf("\n\nGenerated %d tokens total.\n", sampled_tokens);
     printf("\n\ntemperature sampling speed: %.2f tokens/sec\n", tps_sampled);
 
+    float ppl = calculate_ppl(prompt.c_str(), ntokens, m, encoder, decoder, temperature);
+    printf("\n\nthe perplexity score: %.2f", ppl);
     return 0;
 }
