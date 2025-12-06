@@ -5,10 +5,6 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 
 class ABSMaxQuantization:
-    def __init__(self, model_name: str, output_name: str = "absmax.bin"):
-        self.model_name = model_name
-        self.output_name = output_name
-    
     def __init__(self, model_name: str, output_name: str = "model.bin"):
         self.model_name = model_name
         self.model_path = None
