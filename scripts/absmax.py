@@ -38,7 +38,7 @@ class ABSMaxQuantization:
         b = 8
         s = 2 ** (b - 1) / alpha
         quant_tensor = np.round(tensor * s)
-        return quant_tensor.astype(np.int8)
+        return quant_tensor.astype(np.int8), s.item()
     
     def _store_weights(self, layer_name, buff):
         self.bin_file.write(buff)
@@ -59,7 +59,7 @@ class ABSMaxQuantization:
         size = offs[1] - offs[0]
 
         w = np.frombuffer(self.m[off: off + size], dtype=np.float32)
-        w = self._perform_absmax(w)
+        w, scale = self._perform_absmax(w)
         buffer = w.tobytes()
         padded_size = self._store_weights(layer_name, buffer)
 
@@ -69,7 +69,8 @@ class ABSMaxQuantization:
             'padded_size': padded_size,
             'shape': shape, 
             'dtype': str(w.dtype),
-            'transposed': False
+            'transposed': False,
+            'scale': scale
         }
         
         return padded_size
@@ -82,7 +83,7 @@ class ABSMaxQuantization:
         size = offs[1] - offs[0] # ending - starting
 
         w = np.frombuffer(self.m[off: off + size], dtype=np.float32)
-        w = self._perform_absmax(w)
+        w, scale = self._perform_absmax(w)
         w = w.reshape(self.metadata[layer_name]["shape"])
         w = w.T.copy()
         
@@ -95,7 +96,8 @@ class ABSMaxQuantization:
             'padded_size': padded_size,
             'shape': list(reversed(shape)),
             'dtype': str(w.dtype),
-            'transposed': True
+            'transposed': True,
+            'scale': scale
         }
         
         return padded_size
