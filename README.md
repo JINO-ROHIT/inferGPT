@@ -56,6 +56,7 @@ cd .. && ./build/inferGPT
 |---|---|---|---|
 | no SIMD | Temperature | 20 toks/sec | 1.0x |
 | **NEON SIMD** (dot product) | Temperature | **57.27 toks/sec** | **2.9x** |
+| **int4 quantization**  | Temperature | **209.75 toks/sec** | **10x** |
 
 
 Roadmap
