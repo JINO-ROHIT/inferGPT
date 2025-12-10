@@ -16,8 +16,10 @@ set(SOURCES
     src/model.cpp
     src/bpe.cpp
     src/load_gpt2.cpp
+    src/load_gpt2_quant.cpp
     src/ops.cpp
+    src/model_quant.cpp
 )
 
-
 add_executable(inferGPT ${SOURCES})
+
